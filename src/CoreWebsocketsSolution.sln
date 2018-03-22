@@ -1,0 +1,31 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 15
+VisualStudioVersion = 15.0.27130.2036
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CoreWebsockets", "CoreWebsockets\CoreWebsockets.csproj", "{74B40032-3C29-4ABB-9E7D-333DE4494C6D}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CoreWebsockets.Tests", "CoreWebsockets.Tests\CoreWebsockets.Tests.csproj", "{869B6B3C-ADC4-4E75-95F6-62BE966ACB20}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{74B40032-3C29-4ABB-9E7D-333DE4494C6D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{74B40032-3C29-4ABB-9E7D-333DE4494C6D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{74B40032-3C29-4ABB-9E7D-333DE4494C6D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{74B40032-3C29-4ABB-9E7D-333DE4494C6D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{869B6B3C-ADC4-4E75-95F6-62BE966ACB20}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{869B6B3C-ADC4-4E75-95F6-62BE966ACB20}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{869B6B3C-ADC4-4E75-95F6-62BE966ACB20}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{869B6B3C-ADC4-4E75-95F6-62BE966ACB20}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {51099D99-E2FF-40E9-8AED-614038BB6036}
+	EndGlobalSection
+EndGlobal
