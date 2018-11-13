@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -9,9 +8,9 @@ using System.Threading.Tasks;
 
 namespace CoreWebsockets
 {
-    public class SyncWebSocketServer : WebSocketServer
+    public class AsyncWebSocketServer : WebSocketServer
     {
-        public SyncWebSocketServer(int port)
+        public AsyncWebSocketServer(int port)
             : base(port)
         {
         }
@@ -21,7 +20,6 @@ namespace CoreWebsockets
         public override void Run()
         {
             Listener = new TcpListener(System.Net.IPAddress.Any, Port);
-            Listener.Server.NoDelay = true;
             Listener.Start();
 
             Listening = true;
@@ -36,59 +34,63 @@ namespace CoreWebsockets
                         client.NoDelay = true;
                         client.Client.NoDelay = true;
 
-                        Clients.Add(new WebSocketClient()
-                        {
-                            Id = _nextClientId++,
-                            TcpClient = client
-                        });
+                        Task.Run(() => Process(client));
                     }
 
-                    foreach (var item in Clients.Where(a => !a.UpgradedConnection))
-                        ProcessConnection(item);
-
-                    foreach (var item in Clients)
-                        if (!item.TcpClient.Connected)
-                            item.TcpClient.Dispose();
-
-                    Clients = Clients.Where(a => a.TcpClient.Connected).ToList();
-
-                    foreach (var item in Clients.Where(a => a.UpgradedConnection))
-                        ProcessMessage(item);
+                    Thread.Sleep(100);
                 }
                 catch (Exception e)
                 {
                     Console.WriteLine("Server error: " + e.Message);
                 }
-
-                Thread.Sleep(5);
             }
 
             Listening = false;
         }
 
-        private void ProcessConnection(WebSocketClient client)
+        private void Process(System.Net.Sockets.TcpClient client)
         {
+            var clientId = _nextClientId++;
+            string clientEndPoint = client.Client.RemoteEndPoint.ToString();
+
+            var wsClient = new WebSocketClient()
+            {
+                Id = clientId,
+                TcpClient = client
+            };
+
+            Clients.Add(wsClient);
+
+            OnClientConnected(wsClient);
+
             try
             {
-                client.UpgradedConnection = ProcessWebsocketUpgrade(client);
+                //check if it's a websocket connection
+                while (client.Connected)
+                {
+                    if (ProcessWebsocketUpgrade(wsClient))
+                    {
+                        wsClient.UpgradedConnection = true;
+                        break;
+                    }
+                    else
+                    {
+                        Thread.Sleep(50);
+                    }
+                }
+
+                while (client.Connected)
+                    ProcessMessage(wsClient);
             }
             catch (Exception ex)
             {
                 Console.WriteLine(ex.Message);
-
-                client?.Dispose();
-
-                Clients.Remove(client);
-
-                return;
             }
 
-            if (client.UpgradedConnection)
-            {
-                Task
-                    .Delay(ClientUpgradeTimeout)
-                    .ContinueWith(t => OnClientConnected(client));
-            }
+            if (client != null)
+                client.Dispose();
+
+            Clients.Remove(wsClient);
         }
 
         protected override bool ProcessWebsocketUpgrade(WebSocketClient client)
@@ -100,12 +102,12 @@ namespace CoreWebsockets
                 if (!GetAuthentication(message))
                     return false;
 
-                if (!new Regex("Connection:(.*)").Match(message).Groups[1].Value.Trim().Contains("Upgrade"))
+                if (new Regex("Connection:(.*)").Match(message).Groups[1].Value.Trim() != "Upgrade")
                     return false;
 
                 var response = CreateWebsocketUpgradeReponse(message);
 
-                client.TcpClient.Client.Send(response);
+                client.TcpClient.GetStream().Write(response, 0, response.Length);
 
                 return true;
             }

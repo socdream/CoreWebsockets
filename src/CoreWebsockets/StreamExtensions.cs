@@ -104,21 +104,24 @@ namespace CoreWebsockets
             }
         }
 
-        public static List<byte> GetStreamDataAvailable(this NetworkStream stream, int timeout = 100)
+        public static List<byte> GetStreamDataAvailable(this NetworkStream stream)
         {
             var result = new List<byte>();
 
-            var receive = Task.Run(() =>
+            var bufferLength = 8192;
+            var buffer = new byte[bufferLength];
+            var received = 0;
+            var ini = DateTime.Now;
+
+            do
             {
-                while (stream.DataAvailable)
-                {
-                    result.Add((byte)stream.ReadByte());
-                }
-            });
+                if (!stream.DataAvailable)
+                    break;
 
-            var time = Task.Delay(100);
+                received = stream.Read(buffer, 0, buffer.Length);
+                result.AddRange(buffer.Take(received));
 
-            Task.WhenAny(new Task[] { receive, time }).Wait();
+            } while (received == bufferLength);
 
             return result;
         }

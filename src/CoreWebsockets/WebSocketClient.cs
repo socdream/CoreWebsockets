@@ -26,8 +26,8 @@ namespace CoreWebsockets
         public event EventHandler<byte[]> BinaryMessageReceived;
         public event EventHandler<string> ContinuationFrameReceived;
         public event EventHandler<WebSocketFrame.CloseStatusCode> ConnectionClosed;
-        public event EventHandler<Exception> UnexpectedException;
         public event EventHandler Pong;
+        public event EventHandler ClientConnected;
 
         public bool Connect(string url, int timeout = 5000)
         {
@@ -54,22 +54,25 @@ namespace CoreWebsockets
             var retries = 0;
 
             SendUpgradeConnection(url);
+            var loopTime = 50;
 
             while (TcpClient.Connected)
             {
                 if (ReceiveUpgradeConnection())
                 {
                     UpgradedConnection = true;
+                    Task.Run(() => ClientConnected?.Invoke(this, null));
+
                     return true;
                 }
                 else
                 {
                     retries++;
 
-                    if (retries * 500 > timeout)
+                    if (retries * loopTime > timeout)
                         break;
 
-                    Thread.Sleep(500);
+                    Thread.Sleep(loopTime);
                 }
             }
 
@@ -92,13 +95,13 @@ namespace CoreWebsockets
             }
         }
 
-        public int ClientReceiveTimeout { get; set; } = 100;
+        public int ClientReceiveTimeout { get; set; } = 50;
 
         private List<byte> _buffer = new List<byte>();
 
         public string GetHttpRequest()
         {
-            _buffer.AddRange(TcpClient.GetStream().GetStreamDataAvailable(ClientReceiveTimeout));
+            _buffer.AddRange(TcpClient.GetStream().GetStreamDataAvailable());
 
             if (_buffer.Count == 0)
                 return null;
@@ -121,17 +124,19 @@ namespace CoreWebsockets
         /// <returns></returns>
         public WebSocketFrame GetMessage(bool server)
         {
-            _buffer.AddRange(TcpClient.GetStream().GetStreamDataAvailable(ClientReceiveTimeout));
+            var data = TcpClient.GetStream().GetStreamDataAvailable();
+
+            lock (_buffer)
+                _buffer.AddRange(data);
 
             if (_buffer.Count == 0)
                 return null;
 
-            int count;
-
-            var message = WebSocketFrame.DecodeFrame(_buffer.ToArray(), out count, false);
+            var message = WebSocketFrame.DecodeFrame(_buffer.ToArray(), out int count, false);
 
             if (message != null)
-                _buffer = _buffer.Skip(count).ToList();
+                lock (_buffer)
+                    _buffer = _buffer.Skip(count).ToList();
 
             return message;
         }
@@ -140,8 +145,7 @@ namespace CoreWebsockets
         {
             WebSocketFrame message;
 
-            lock (_buffer)
-                message = GetMessage(false);
+            message = GetMessage(false);
 
             if (message == null)
                 return;
