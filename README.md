@@ -1,6 +1,6 @@
 # CoreWebsockets
 
-.NET Core Websockets server and client.
+.NET 5 Websockets server and client.
 
 It's a low level implementation using TcpClient to be compatible with any platform including Windows 7.
 

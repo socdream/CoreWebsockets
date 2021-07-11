@@ -48,7 +48,7 @@ namespace CoreWebsockets.Tests
 
             //client.Send("Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.");
 
-            var messageLength = 10;
+            var messageLength = 1024;
             await client.Send(string.Join("", Enumerable.Range(0, messageLength).Select(a => (a % 10 == 0) ? " " : "a"))).ConfigureAwait(false);
 
             while (!dataReceived && client.Connected)
@@ -60,7 +60,7 @@ namespace CoreWebsockets.Tests
         }
 
         [TestMethod]
-        public void TestWebsocketMultipleMessages()
+        public async Task TestWebsocketMultipleMessages()
         {
             var port = 15005;
 
@@ -71,7 +71,7 @@ namespace CoreWebsockets.Tests
 
                 Thread.Sleep(2000);
 
-                TestClient(server, port, 0, 100);
+                await TestClient(server, port, 0, 100).ConfigureAwait(false);
             }
         }
 
