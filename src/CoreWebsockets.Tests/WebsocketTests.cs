@@ -16,47 +16,47 @@ namespace CoreWebsockets.Tests
         }
 
         [TestMethod]
-        public void TestWebsocketClient()
+        public async Task TestWebsocketClient()
         {
-            var url = "ws://demos.kaazing.com/echo";
+            var url = "wss://echo.websocket.org";
 
-            using (var client = new WebSocketClient())
+            using var client = new WebSocketClient();
+
+            var dataReceived = false;
+
+            client.MessageReceived += (wsClient, data) =>
             {
-                Assert.IsTrue(client.Connect(url));
-                Assert.IsTrue(client.UpgradedConnection);
+                Console.Write(data);
+                dataReceived = true;
+            };
 
-                var dataReceived = false;
+            client.ContinuationFrameReceived += (wsClient, data) =>
+            {
+                Console.Write(data);
+            };
 
-                client.MessageReceived += (wsClient, data) =>
-                {
-                    Console.Write(data);
-                    dataReceived = true;
-                };
+            client.ConnectionClosed += (wsClient, code) =>
+            {
+                Console.WriteLine($"Closed: {code}");
+            };
 
-                client.ContinuationFrameReceived += (wsClient, data) =>
-                {
-                    Console.Write(data);
-                };
+            Assert.IsTrue(await client.Connect(url).ConfigureAwait(false));
+            Thread.Sleep(1000);
+            Assert.IsTrue(client.UpgradedConnection);
 
-                client.ConnectionClosed += (wsClient, code) =>
-                {
-                    Console.WriteLine($"Closed: {code}");
-                };
+            Task.Run(() => client.Run());
 
-                Task.Run(() => client.Run());
+            //client.Send("Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.");
 
-                //client.Send("Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.");
+            var messageLength = 10;
+            await client.Send(string.Join("", Enumerable.Range(0, messageLength).Select(a => (a % 10 == 0) ? " " : "a"))).ConfigureAwait(false);
 
-                var messageLength = 1024;
-                client.Send(string.Join("", Enumerable.Range(0, messageLength).Select(a => (a % 10 == 0) ? " " : "a")));
+            while (!dataReceived && client.Connected)
+                Thread.Sleep(100);
 
-                while (!dataReceived && client.TcpClient.Connected)
-                    Thread.Sleep(100);
+            Thread.Sleep(500);
 
-                Thread.Sleep(500);
-
-                Assert.IsTrue(dataReceived);
-            }
+            Assert.IsTrue(dataReceived);
         }
 
         [TestMethod]
@@ -105,11 +105,11 @@ namespace CoreWebsockets.Tests
             Console.WriteLine($"Client Connected: {ConnectedClients}");
         }
 
-        public void TestClient(SyncWebSocketServer server, int port, int index, int packets = 1)
+        public async Task TestClient(SyncWebSocketServer server, int port, int index, int packets = 1)
         {
             using (var client = new WebSocketClient())
             {
-                Assert.IsTrue(client.Connect($"ws://127.0.0.1:{port}"));
+                Assert.IsTrue(await client.Connect($"ws://127.0.0.1:{port}").ConfigureAwait(false));
                 Thread.Sleep(1000);
                 Assert.IsTrue(client.UpgradedConnection);
 
@@ -134,7 +134,7 @@ namespace CoreWebsockets.Tests
 
                 Task.Run(() => client.Run());
 
-                while (dataReceived < packets && client.TcpClient.Connected && server.Clients.Count > 0)
+                while (dataReceived < packets && client.Connected && server.Clients.Count > 0)
                 {
                     if (sent == dataReceived)
                     {

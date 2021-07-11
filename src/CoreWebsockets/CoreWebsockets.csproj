@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>netstandard2.0</TargetFramework>
+    <TargetFramework>net5.0</TargetFramework>
     <PackageId>JavierOltra.CoreWebsockets</PackageId>
     <Authors>Javier Oltra</Authors>
     <Description>.NET Core websocket server and client library.</Description>
@@ -12,5 +12,10 @@
     <PackageTags>websocket client server</PackageTags>
     <PackageReleaseNotes>Stable release</PackageReleaseNotes>
   </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Newtonsoft.Json" Version="12.0.3" />
+    <PackageReference Include="NLog" Version="4.7.6" />
+  </ItemGroup>
 
 </Project>

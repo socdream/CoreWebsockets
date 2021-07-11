@@ -1,4 +1,5 @@
-﻿using System;
+﻿using NLog;
+using System;
 using System.Collections.Generic;
 using System.Net.Sockets;
 using System.Text;
@@ -10,6 +11,8 @@ namespace CoreWebsockets
 {
     public class AsyncWebSocketServer : WebSocketServer
     {
+        public static readonly Logger _logger = LogManager.GetCurrentClassLogger();
+
         public AsyncWebSocketServer(int port)
             : base(port)
         {
@@ -17,7 +20,7 @@ namespace CoreWebsockets
 
         private int _nextClientId = 0;
 
-        public override void Run()
+        public override async void Run()
         {
             Listener = new TcpListener(System.Net.IPAddress.Any, Port);
             Listener.Start();
@@ -30,33 +33,32 @@ namespace CoreWebsockets
                 {
                     if (Listener.Pending())
                     {
-                        var client = Listener.AcceptTcpClient();
+                        var client = await Listener.AcceptTcpClientAsync().ConfigureAwait(false);
                         client.NoDelay = true;
                         client.Client.NoDelay = true;
 
-                        Task.Run(() => Process(client));
+                        Process(client);
                     }
 
-                    Thread.Sleep(100);
+                    await Task.Delay(100).ConfigureAwait(false);
                 }
                 catch (Exception e)
                 {
-                    Console.WriteLine("Server error: " + e.Message);
+                    _logger.Error(e);
                 }
             }
 
             Listening = false;
         }
 
-        private void Process(System.Net.Sockets.TcpClient client)
+        private async void Process(System.Net.Sockets.TcpClient client)
         {
             var clientId = _nextClientId++;
-            string clientEndPoint = client.Client.RemoteEndPoint.ToString();
 
-            var wsClient = new WebSocketClient()
+            var wsClient = new WebSocketClient(client)
             {
                 Id = clientId,
-                TcpClient = client
+                ServerClient = true
             };
 
             Clients.Add(wsClient);
@@ -68,46 +70,48 @@ namespace CoreWebsockets
                 //check if it's a websocket connection
                 while (client.Connected)
                 {
-                    if (ProcessWebsocketUpgrade(wsClient))
+                    if (await ProcessWebsocketUpgrade(wsClient).ConfigureAwait(false))
                     {
                         wsClient.UpgradedConnection = true;
                         break;
                     }
                     else
                     {
-                        Thread.Sleep(50);
+                        await Task.Delay(50).ConfigureAwait(false);
                     }
                 }
 
-                while (client.Connected)
-                    ProcessMessage(wsClient);
+                while (client.IsConnected())
+                {
+                    var messages = await wsClient.GetMessages().ConfigureAwait(false);
+
+                    ProcessMessage(wsClient, messages);
+                }
             }
             catch (Exception ex)
             {
-                Console.WriteLine(ex.Message);
+                _logger.Error(ex);
             }
 
-            if (client != null)
-                client.Dispose();
+            client?.Dispose();
 
             Clients.Remove(wsClient);
         }
 
-        protected override bool ProcessWebsocketUpgrade(WebSocketClient client)
+        private async Task<bool> ProcessWebsocketUpgrade(WebSocketClient client)
         {
-            var message = client.GetHttpRequest();
+            var message = await client.GetHttpRequest().ConfigureAwait(false);
 
             if (message?.StartsWith("GET") ?? false)
             {
                 if (!GetAuthentication(message))
                     return false;
 
-                if (new Regex("Connection:(.*)").Match(message).Groups[1].Value.Trim() != "Upgrade")
+                if (!new Regex("Connection:(.*)").Match(message).Groups[1].Value.Trim().StartsWith("Upgrade"))
                     return false;
 
                 var response = CreateWebsocketUpgradeReponse(message);
-
-                client.TcpClient.GetStream().Write(response, 0, response.Length);
+                await client.SendRawData(response).ConfigureAwait(false);
 
                 return true;
             }

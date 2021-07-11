@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net.Security;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading.Tasks;
@@ -27,7 +28,7 @@ namespace CoreWebsockets
                         break;
                 }
             }
-            catch (Exception e)
+            catch (Exception)
             {
 
             }
@@ -64,7 +65,7 @@ namespace CoreWebsockets
                 var length = (int)stream.GetByte(timeout);
 
                 if (masked)
-                    length = length - 128;
+                    length -= 128;
 
                 var lenBuf = new byte[0];
 
@@ -111,7 +112,6 @@ namespace CoreWebsockets
             var bufferLength = 8192;
             var buffer = new byte[bufferLength];
             var received = 0;
-            var ini = DateTime.Now;
 
             do
             {
@@ -124,6 +124,95 @@ namespace CoreWebsockets
             } while (received == bufferLength);
 
             return result;
+        }
+
+        public static async Task<List<byte>> GetStreamDataAvailableAsync(this NetworkStream stream)
+        {
+            var result = new List<byte>();
+
+            var bufferLength = 8192;
+            var buffer = new byte[bufferLength];
+            var received = 0;
+
+            do
+            {
+                if (!stream.DataAvailable)
+                    break;
+
+                received = await stream.ReadAsync(buffer, 0, buffer.Length).ConfigureAwait(false);
+                result.AddRange(buffer.Take(received));
+
+            } while (received == bufferLength);
+
+            return result;
+        }
+
+        public static List<byte> GetStreamDataAvailable(this SslStream stream)
+        {
+            var result = new List<byte>();
+
+            var bufferLength = 8192;
+            var buffer = new byte[bufferLength];
+            var received = 0;
+
+            do
+            {
+                try
+                {
+                    received = stream.Read(buffer, 0, buffer.Length);
+                    result.AddRange(buffer.Take(received));
+                }
+                catch (Exception)
+                {
+                }
+            } while (received == bufferLength);
+
+            return result;
+        }
+
+        public static async Task<List<byte>> GetStreamDataAvailableAsync(this SslStream stream)
+        {
+            var result = new List<byte>();
+
+            var bufferLength = 8192;
+            var buffer = new byte[bufferLength];
+            var received = 0;
+
+            do
+            {
+                try
+                {
+                    received = await stream.ReadAsync(buffer, 0, buffer.Length).ConfigureAwait(false);
+                    result.AddRange(buffer.Take(received));
+                }
+                catch (Exception)
+                {
+                }
+            } while (received == bufferLength);
+
+            return result;
+        }
+
+        public static List<byte> GetStreamDataAvailable(this Stream stream)
+        {
+            if (stream is SslStream)
+                return (stream as SslStream).GetStreamDataAvailable();
+
+            if (stream is NetworkStream)
+                return (stream as NetworkStream).GetStreamDataAvailable();
+
+            return new List<byte>();
+        }
+
+        public static async Task<List<byte>> GetStreamDataAvailableAsync(this Stream stream)
+        {
+            if (stream is SslStream)
+                return await (stream as SslStream).GetStreamDataAvailableAsync().ConfigureAwait(false);
+
+            if (stream is NetworkStream)
+                return await (stream as NetworkStream).GetStreamDataAvailableAsync().ConfigureAwait(false);
+
+            return new List<byte>();
         }
     }
 }

@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Newtonsoft.Json;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -46,61 +47,52 @@ namespace CoreWebsockets
 
         public abstract void Run();
 
-        protected abstract bool ProcessWebsocketUpgrade(WebSocketClient client);
-
-        public void Send(WebSocketClient client, string message)
+        public void Send(TcpClient client, string message)
         {
-            Send(client, new WebSocketFrame() { Code = WebSocketFrame.OpCode.TextFrame, Data = Encoding.UTF8.GetBytes(message) });
+            Send(client, new WebSocketFrame()
+            {
+                Code = WebSocketFrame.OpCode.TextFrame,
+                Data = Encoding.UTF8.GetBytes(message)
+            });
         }
 
-        public void Send(WebSocketClient client, WebSocketFrame message)
+        public void Send(TcpClient client, WebSocketFrame message)
         {
-            var buffer = WebSocketFrame.EncodeFrame(message);
+            var buffer = WebSocketFrame.EncodeFrame(message, false);
 
-            lock (client)
-                try
-                {
-                    if (client.Connected)
-                        client.TcpClient.Client.Send(buffer);
-                }
-                catch (Exception)
-                {
-                }
+            try
+            {
+                if (client.Connected)
+                    client.Client.Send(buffer);
+            }
+            catch (Exception)
+            {
+            }
         }
 
         public void Send(WebSocketFrame message)
         {
-            foreach (var client in Clients.Where(a => (a?.UpgradedConnection ?? false) && (a?.TcpClient?.Connected ?? false)))
-                Send(client, message);
+            foreach (var client in Clients.ToList())
+                if ((client?.UpgradedConnection ?? false) && (client?.Connected ?? false))
+                    client.Send(message);
         }
 
         public void Send(string message)
         {
-            Send(new WebSocketFrame() { Code = WebSocketFrame.OpCode.TextFrame, Data = Encoding.UTF8.GetBytes(message) });
-        }
-
-        public void Send<T>(WebSocketClient client, T data)
-        {
-            var serializer = new DataContractJsonSerializer(typeof(T));
-
-            using (var stream = new MemoryStream())
+            Send(new WebSocketFrame()
             {
-                serializer.WriteObject(stream, data);
-
-                Send(client, new WebSocketFrame() { Code = WebSocketFrame.OpCode.TextFrame, Data = stream.ToArray() });
-            }
+                Code = WebSocketFrame.OpCode.TextFrame,
+                Data = Encoding.UTF8.GetBytes(message)
+            });
         }
 
         public void Send<T>(T data)
         {
-            var serializer = new DataContractJsonSerializer(typeof(T));
-
-            using (var stream = new MemoryStream())
+            Send(new WebSocketFrame()
             {
-                serializer.WriteObject(stream, data);
-
-                Send(new WebSocketFrame() { Code = WebSocketFrame.OpCode.TextFrame, Data = stream.ToArray() });
-            }
+                Code = WebSocketFrame.OpCode.TextFrame,
+                Data = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(data))
+            });
         }
 
         protected byte[] CreateWebsocketUpgradeReponse(string upgradeRequest)
@@ -146,33 +138,37 @@ Sec-WebSocket-Accept: {Convert.ToBase64String(
         public int ClientReceiveTimeout { get; set; } = 100;
         public int ClientUpgradeTimeout { get; set; } = 500;
 
-        protected void ProcessMessage(WebSocketClient client)
+        protected void ProcessMessage(WebSocketClient client, IEnumerable<WebSocketFrame> messages)
         {
-            WebSocketFrame message = null;
+            if (messages is null)
+                return;
 
-            lock (client)
-                message = client.GetMessage(true);
-
-            if (message != null)
+            foreach (var message in messages)
             {
                 switch (message.Code)
                 {
                     case WebSocketFrame.OpCode.ContinuationFrame:
                         break;
                     case WebSocketFrame.OpCode.TextFrame:
-                        Task.Run(() => MessageReceived?.Invoke(this, new MessageReceivedArgs() { Client = client, Message = Encoding.UTF8.GetString(message.Data) }));
+                        if (message.Data.Length > 0)
+                            Task.Run(() => MessageReceived?.Invoke(this, new MessageReceivedArgs()
+                            {
+                                Client = client,
+                                Message = Encoding.UTF8.GetString(message.Data)
+                            }));
                         break;
                     case WebSocketFrame.OpCode.BinaryFrame:
                         break;
                     case WebSocketFrame.OpCode.ConnectionClose:
-                        client.TcpClient.Close();
-                        client.TcpClient.Dispose();
+                        client.Dispose();
                         Clients.Remove(client);
                         Console.WriteLine("Client " + client.Id + " closing...");
                         break;
                     case WebSocketFrame.OpCode.Ping:
-                        Console.WriteLine("Ping received.");
-                        Send(client, new WebSocketFrame() { Code = WebSocketFrame.OpCode.Pong, Data = new byte[0] });
+                        client.Send(new WebSocketFrame()
+                        {
+                            Code = WebSocketFrame.OpCode.Pong
+                        });
                         break;
                     case WebSocketFrame.OpCode.Pong:
                         Console.WriteLine("Pong received.");
@@ -195,7 +191,7 @@ Sec-WebSocket-Accept: {Convert.ToBase64String(
                 Listener.Stop();
 
                 foreach (var client in Clients)
-                    client.TcpClient.Dispose();
+                    client.Dispose();
             }
 
             // Code to dispose the un-managed resources of the class

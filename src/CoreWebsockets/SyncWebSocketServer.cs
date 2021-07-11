@@ -36,10 +36,10 @@ namespace CoreWebsockets
                         client.NoDelay = true;
                         client.Client.NoDelay = true;
 
-                        Clients.Add(new WebSocketClient()
+                        Clients.Add(new WebSocketClient(client)
                         {
                             Id = _nextClientId++,
-                            TcpClient = client
+                            ServerClient = true
                         });
                     }
 
@@ -47,13 +47,17 @@ namespace CoreWebsockets
                         ProcessConnection(item);
 
                     foreach (var item in Clients)
-                        if (!item.TcpClient.Connected)
-                            item.TcpClient.Dispose();
+                        if (!item.Connected)
+                            item.Dispose();
 
-                    Clients = Clients.Where(a => a.TcpClient.Connected).ToList();
+                    Clients = Clients.Where(a => a.Connected).ToList();
 
-                    foreach (var item in Clients.Where(a => a.UpgradedConnection))
-                        ProcessMessage(item);
+                    foreach (var item in Clients.Where(a => a.UpgradedConnection).ToList())
+                    {
+                        var messages = item.GetMessages().GetAwaiter().GetResult();
+
+                        ProcessMessage(item, messages);
+                    }
                 }
                 catch (Exception e)
                 {
@@ -91,21 +95,22 @@ namespace CoreWebsockets
             }
         }
 
-        protected override bool ProcessWebsocketUpgrade(WebSocketClient client)
+        private bool ProcessWebsocketUpgrade(WebSocketClient client)
         {
-            var message = client.GetHttpRequest();
+            var message = client.GetHttpRequest().GetAwaiter().GetResult();
 
             if (message?.StartsWith("GET") ?? false)
             {
                 if (!GetAuthentication(message))
                     return false;
 
-                if (!new Regex("Connection:(.*)").Match(message).Groups[1].Value.Trim().Contains("Upgrade"))
+                var parsedConnection = new Regex("Connection:(.*)", RegexOptions.IgnoreCase).Match(message).Groups[1].Value.Trim();
+                if (!parsedConnection.Contains("Upgrade") && !parsedConnection.Contains("upgrade"))
                     return false;
 
                 var response = CreateWebsocketUpgradeReponse(message);
 
-                client.TcpClient.Client.Send(response);
+                client.SendRawData(response).GetAwaiter().GetResult();
 
                 return true;
             }
